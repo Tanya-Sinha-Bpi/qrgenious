@@ -24,7 +24,7 @@ export const createQR = async (req, res) => {
         dark: color,
         light: '#ffffff00' // transparent background
       },
-      width: 200,
+      width: 150,
       margin: 2
     });
     

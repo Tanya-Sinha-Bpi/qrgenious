@@ -7,15 +7,20 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:7000',
+        target: 'https://qrgenious.onrender.com',
         changeOrigin: true,
         secure: false,
       }
     }
   },
+  build: {
+    sourcemap: false, // disables .map files in dist
+    outDir: 'dist',   // default is fine unless you're customizing
+  },
   css: {
     postcss: './postcss.config.js',
   },
+
 })
 
 

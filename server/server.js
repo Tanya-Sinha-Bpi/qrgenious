@@ -31,17 +31,16 @@ if (process.env.ENABLE_HEAP === 'true') {
 }
 
 // Show memory usage after startup
-setTimeout(() => {
-  const used = process.memoryUsage();
-  console.log("🚨 Memory Usage After Startup:", {
-    rss: (used.rss / 1024 / 1024).toFixed(2) + " MB",
-    heapUsed: (used.heapUsed / 1024 / 1024).toFixed(2) + " MB",
-    heapTotal: (used.heapTotal / 1024 / 1024).toFixed(2) + " MB",
+setInterval(() => {
+  const mem = process.memoryUsage();
+  console.log("📊 Memory:", {
+    rss: (mem.rss / 1024 / 1024).toFixed(2) + " MB",
+    heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2) + " MB",
+    external: (mem.external / 1024 / 1024).toFixed(2) + " MB",
   });
-}, 2000);
+}, 10000);
 
-// Connect to MongoDB
-connectDB();
+
 
 // Rate limiter
 const limiter = rateLimit({
@@ -129,5 +128,7 @@ app.use((req, res, next) => {
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
+  // Connect to MongoDB
+  connectDB();
   console.log(`🌐 Server running on 🚀 http://localhost:${PORT}`);
 });

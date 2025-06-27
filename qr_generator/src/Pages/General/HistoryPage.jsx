@@ -46,9 +46,9 @@ function HistoryPage() {
 
         localStorage.setItem(
           "qr_history",
-          JSON.stringify(merged.slice(0, 1000))
+          JSON.stringify(merged.slice(0, 20))
         );
-        setQrHistory(merged.slice(0, 1000));
+        setQrHistory(merged.slice(0, 20));
         setHistory(res.data);
       } catch (err) {
         toast.error(

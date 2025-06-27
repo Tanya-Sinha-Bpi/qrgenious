@@ -87,7 +87,7 @@ function App() {
           </Route>
 
           {/* Public QR Detail Page */}
-          <Route path="/qr/:id" element={<QRDetailPage publicAccess />} />
+
 
           {/* Not Found */}
           <Route path="*" element={<NotFoundPage />} />

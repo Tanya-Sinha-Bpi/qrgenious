@@ -78,7 +78,7 @@ const QRForm = ({
 
       // Save or update QR
       const qr = {
-        qrId: response.data.id || formData.qrId,
+        qrId: response.data?.id || formData.qrId,
         qrImage: response.data.qrImage || "",
         downloadLink: response.data.downloadLink || "",
         slugName: response.data.slug || "",
@@ -93,7 +93,7 @@ const QRForm = ({
 
       setSuccess("QR code generated successfully!");
       toast.success(
-        response.data?.message || "QR code generated successfully!"
+        response?.data?.message || "QR code generated successfully!"
       );
 
       try {

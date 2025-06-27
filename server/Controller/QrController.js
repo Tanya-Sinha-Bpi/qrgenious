@@ -56,7 +56,7 @@ export const createQR = async (req, res) => {
       content
     });
   } catch (error) {
-    console.error("creating qr image",error);
+    console.error("creating qr ",error);
     return res.status(500).json({ error: 'Failed to generate QR' });
   }
 };
@@ -69,6 +69,7 @@ export const getQRHistory = async (req, res) => {
       
     res.json(qrData);
   } catch (error) {
+    console.log("error in getQRHistory",error);
     res.status(500).json({ error: 'Failed to fetch history' });
   }
 };
@@ -86,6 +87,7 @@ export const deleteQR = async (req, res) => {
     
     res.json({ message: 'QR deleted successfully' });
   } catch (error) {
+    console.log("error in deleteQR",error);
     return res.status(500).json({ message: 'Failed to delete QR' });
   }
 };
@@ -120,6 +122,7 @@ export const getQRDetails = async (req, res) => {
     
     return res.json(qrData);
   } catch (error) {
+    console.log("error in getQRdetails",error);
     return res.status(500).json({ error: 'Failed to retrieve QR details Server error' + error.message });
   }
 };
@@ -158,6 +161,7 @@ export const downloadQR = async (req, res) => {
       }
     });
   } catch (error) {
+    console.log("error in downloading",error);
     res.status(500).json({ error: 'Failed to generate QR' });
   }
 };
@@ -203,9 +207,10 @@ export const updateQR = async (req, res) => {
       qrImage: qrData.qrImage, 
       slug: qrData.slug, 
       generatedBy: 'Admin',
-      createdAt,
+      createdAt: qrData.createdAt,
     });
   } catch (error) {
+    console.log("error in updating",error);
     return res.status(500).json({ error: 'Failed to retrieve QR details Server error' + error.message });
   }
 };
@@ -237,6 +242,7 @@ export const getQRBySlug = async (req, res) => {
       lastScanned: qr.lastScannedAt,
     });
   } catch (err) {
+    console.log("error in getQRbySlug",error);
     return res.status(500).json({ error: 'Server error: ' + err.message });
   }
 };

@@ -75,7 +75,9 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/qr', qrRoutes);
 
-app.use(express.static(path.join(__dirname, "/qr_generator/dist")));
+// app.use(express.static(path.join(__dirname, "/qr_generator/dist")));
+app.use(express.static(path.join(__dirname, "../qr_generator/dist")));
+
 console.log(path.join(__dirname, "/qr_generator/dist")); // Path verification
 
 app.get("*", (req, res) => {

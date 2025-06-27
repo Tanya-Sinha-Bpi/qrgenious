@@ -1,4 +1,4 @@
-import QRData from '../models/QRData.js';
+import QRData from '../Models/QRData.js';
 import QRCode from 'qrcode';
 import fs from 'fs';
 import path from 'path';

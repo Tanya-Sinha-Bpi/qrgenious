@@ -1,6 +1,6 @@
 import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_REACT_APP_API_URL ;
+import Staitc_uri from './Static_Uri';
+const API_URL = Staitc_uri.VITE_REACT_APP_API_URL;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -47,7 +47,7 @@ export const resendOTP = (email) => {
 };
 
 export const verifyToken = async () => {
-  const res = await api.get(`${import.meta.env.VITE_BACKEND_URL}/api/auth/me`, {
+  const res = await api.get(`${Staitc_uri.VITE_BACKEND_URL}/api/auth/me`, {
     withCredentials: true // ⬅️ Must be true for cookies to work
   });
   return res.data;

@@ -1,7 +1,8 @@
 // src/api/qr.js
 import axios from 'axios';
 import Cookies from 'js-cookie';
-export const API_URL = import.meta.env.VITE_QR_APP_API_URL;
+import Staitc_uri from './Static_Uri';
+export const API_URL = Staitc_uri.VITE_QR_APP_API_URL;
 
 // Create Axios instance with base URL
 const api = axios.create({

@@ -1,5 +1,5 @@
 import User from '../Models/User.js';
-import { sendOTPEmail } from '../utils/sendEmail.js';
+import { sendOTPEmail } from '../Utils/sendEmail.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';

@@ -11,6 +11,7 @@ import path from 'path';
 import connectDB from './Config/DB.js';
 import authRoutes from './Routes/authRoutes.js';
 import qrRoutes from './Routes/qrRoutes.js';
+import mongoose from 'mongoose';
 
 dotenv.config();
 
@@ -39,6 +40,11 @@ setInterval(() => {
     external: (mem.external / 1024 / 1024).toFixed(2) + " MB",
   });
 }, 10000);
+
+// setInterval(() => {
+//   global.gc(); // Manually invoke garbage collection
+//   console.log('Garbage collection triggered!');
+// }, 10000);
 
 
 
@@ -80,10 +86,6 @@ app.use(helmet({
 app.use(cookieParser());
 app.use(limiter);
 
-// Optional: Add your XSS and mongoSanitize middleware here if needed
-// app.use(xss());
-// app.use(mongoSanitize());
-
 // Routes Logging for Debugging
 console.log('✅ qrRoutes is:', typeof qrRoutes, qrRoutes?.stack ? 'Router stack loaded' : 'MISSING or INVALID');
 console.log('✅ authRoutes is:', typeof authRoutes, authRoutes?.stack ? 'Router stack loaded' : 'MISSING or INVALID');
@@ -101,6 +103,7 @@ app.use((req, res, next) => {
   next();
 });
 
+
 // Catch-all route to serve index.html for SPA support — MUST BE LAST route
 app.get((req, res) => {
   const indexPath = path.join(__dirname, "qr_generator", "dist", "index.html");
@@ -112,6 +115,14 @@ app.use((err, req, res, next) => {
   console.error('🔥 Full error stack:', err.stack);
   res.status(500).json({ error: 'Internal Server Error: ' + err.message });
 });
+
+// MongoDB Connection
+connectDB();
+
+mongoose.set('bufferCommands', false);
+
+
+mongoose.set('debug', true);
 
 
 app.use((req, res, next) => {

@@ -6,9 +6,10 @@ const qrDataSchema = new mongoose.Schema({
   title: String,
   content: String,
   createdAt: { type: Date, default: Date.now },
+  updatedAt:{type:Date},
   generatedBy: {
   type: String,
-  enum: ['admin'], // if you might allow more types in future
+  enum: ['admin','Admin'], // if you might allow more types in future
   default: 'admin'
 },
 slug: {

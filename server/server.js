@@ -1,70 +1,59 @@
+// ================== ENV CONFIG ==================
 import { config } from 'dotenv';
 import path from 'path';
+config({ path: path.resolve(process.cwd(), '.env') });
 
-// Load env vars ONCE and ONLY ONCE
-const envPath = path.resolve(process.cwd(), '.env');
-config({ path: envPath });
+// ================== MEMORY LIMITS ==================
+import v8 from 'v8';
+v8.setFlagsFromString('--max-old-space-size=500');
 
+// ================== IMPORTS ==================
 import express from 'express';
-// import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
-// import path from 'path';
-import mongoose from 'mongoose';
 
-// Load env vars ONCE at startup
-// dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Custom Routes
+import authRoutes from './Routes/authRoutes.js';
+import qrRoutes from './Routes/qrRoutes.js';
 
+// ================== EXPRESS SETUP ==================
 const app = express();
 const __dirname = path.resolve();
 
-// ================== CRITICAL MEMORY OPTIMIZATIONS ==================
+// Disable unnecessary features
+app.disable('x-powered-by');
+app.disable('etag');
 
-// 1. Disable mongoose buffering and set timeouts
+// ================== MONGOOSE CONFIG ==================
+// Correct way to set pool size (must be in connection options)
+const mongooseOptions = {
+  maxPoolSize: 3,  // Reduced connection pool
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 30000,
+  connectTimeoutMS: 30000
+};
+
 mongoose.set('bufferCommands', false);
 mongoose.set('bufferTimeoutMS', 30000);
 
-// 2. Limit connection pool size
-const mongooseOptions = {
-  // Correct option name is 'maxPoolSize' (not 'poolSize')
-  maxPoolSize: 5, // Reduced connection pool size
-  serverSelectionTimeoutMS: 5000, // Fail fast if no server available
-  socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-  connectTimeoutMS: 30000 // Give up initial connection after 30s
-};
-
-// 3. Remove all development-only middleware in production
-if (process.env.NODE_ENV === 'production') {
-  // Disable verbose logging
-  mongoose.set('debug', false);
-  
-  // Remove any development middleware
-} else {
-  // Development-only logging
-  mongoose.set('debug', true);
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
-    next();
-  });
-}
-
 // ================== MIDDLEWARE ==================
-app.use(express.json({ limit: "5mb" })); // Reduced from 10mb
-app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+app.use(express.json({ limit: '500kb' }));
+app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 app.use(helmet());
 app.use(cookieParser());
 
-// Slimmer rate limiting
+// Rate limiting
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // Reduced from 3000
+  max: 100
 }));
 
-// CORS with production-ready settings
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? [process.env.PRODUCTION_URL] 
+// CORS
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [process.env.PRODUCTION_URL]
   : [
       "http://localhost:3000",
       "http://localhost:3001",
@@ -77,23 +66,27 @@ app.use(cors({
 }));
 
 // ================== ROUTES ==================
-import authRoutes from './Routes/authRoutes.js';
-import qrRoutes from './Routes/qrRoutes.js';
+try {
+  app.use('/api/auth', authRoutes);
+  app.use('/api/qr', qrRoutes);
+  console.log('✅ All routes mounted successfully');
+} catch (err) {
+  console.error('❌ Route mounting failed:', err);
+  process.exit(1);
+}
 
-app.use('/api/auth', authRoutes);
-app.use('/api/qr', qrRoutes);
-
-// Static files with cache control
+// Static files
 app.use(express.static(path.join(__dirname, "qr_generator", "dist"), {
   maxAge: '1y',
   immutable: true
 }));
 
-// Single catch-all route for SPA
+// SPA fallback
 app.get((req, res) => {
   res.sendFile(path.join(__dirname, "qr_generator", "dist", "index.html"));
 });
 
+// Add this error handler BELOW your routes but ABOVE the SPA fallback
 app.use((req, res, next) => {
   const acceptHeader = req.headers.accept || "";
 
@@ -105,43 +98,54 @@ app.use((req, res, next) => {
   }
 });
 
-// ================== ERROR HANDLING ==================
+// ================== ERROR HANDLER ==================
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Server Error');
+  console.error('Error:', err.message);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// ================== SERVER START ==================
-const startServer = async () => {
+// ================== DB CONNECTION ==================
+async function connectDB() {
   try {
     await mongoose.connect(process.env.MONGO_URI, mongooseOptions);
     console.log('✅ MongoDB Connected');
+  } catch (err) {
+    console.error('❌ MongoDB Connection Error:', err.message);
+    process.exit(1);
+  }
+}
+
+// ================== SERVER START ==================
+async function startServer() {
+  try {
+    await connectDB();
     
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      
+      // Initial memory log
+      const mem = process.memoryUsage();
+      console.log(`Initial memory: ${Math.round(mem.heapUsed / 1024 / 1024)}MB`);
     });
 
-    // Handle server shutdown gracefully
+    // Graceful shutdown
     process.on('SIGTERM', () => {
-      console.log('SIGTERM received. Shutting down gracefully...');
+      console.log('SIGTERM received. Shutting down...');
       server.close(() => {
         mongoose.connection.close(false, () => {
-          console.log('MongoDB connection closed');
+          console.log('Server and MongoDB closed');
           process.exit(0);
         });
       });
     });
 
   } catch (err) {
-    console.error('❌ Server startup failed:', err);
-    process.exit(1); // Exit with failure code
+    console.error('❌ Server startup failed:', err.message);
+    process.exit(1);
   }
-};
+}
 
-// Start with memory limits
-const memoryLimit = process.env.NODE_ENV === 'production' ? 500 : 4096;
-process.env.NODE_OPTIONS = `--max-old-space-size=${memoryLimit}`;
 startServer();
 
 // // server.js

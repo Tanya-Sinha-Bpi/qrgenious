@@ -6,54 +6,52 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import path from 'path';
-
+import mongoose from 'mongoose';
 // Custom Modules
 import connectDB from './Config/DB.js';
 import authRoutes from './Routes/authRoutes.js';
 import qrRoutes from './Routes/qrRoutes.js';
-import mongoose from 'mongoose';
+
 
 dotenv.config();
 
 const app = express();
 const __dirname = path.resolve();
 
-// Middleware: Log incoming requests
-app.use((req, res, next) => {
-  console.log(`Incoming Request: ${req.method} ${req.path}`);
-  next();
-});
-
 // Optional: Heapdump on startup for memory profiling
-if (process.env.ENABLE_HEAP === 'true') {
-  import('heapdump').then(heapdump => {
-    heapdump.writeSnapshot(`./heap-${Date.now()}.heapsnapshot`);
-  });
-}
+// if (process.env.ENABLE_HEAP === 'true') {
+//   import('heapdump').then(heapdump => {
+//     heapdump.writeSnapshot(`./heap-${Date.now()}.heapsnapshot`);
+//   });
+// }
 
 // Show memory usage after startup
-setInterval(() => {
-  const mem = process.memoryUsage();
-  console.log("📊 Memory:", {
-    rss: (mem.rss / 1024 / 1024).toFixed(2) + " MB",
-    heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2) + " MB",
-    external: (mem.external / 1024 / 1024).toFixed(2) + " MB",
-  });
-}, 10000);
-
 // setInterval(() => {
-//   global.gc(); // Manually invoke garbage collection
-//   console.log('Garbage collection triggered!');
+//   const mem = process.memoryUsage();
+//   console.log("📊 Memory:", {
+//     rss: (mem.rss / 1024 / 1024).toFixed(2) + " MB",
+//     heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2) + " MB",
+//     external: (mem.external / 1024 / 1024).toFixed(2) + " MB",
+//   });
 // }, 10000);
 
-
-
+// Security and Parsing Middleware
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
+app.use(cookieParser());
 // Rate limiter
 const limiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour window
   max: 3000,
   message: "Too many requests from this IP, please try again after an hour!",
 });
+app.use(limiter);
+
+
+
 
 // Allowed CORS origins
 const allowedOrigins = [
@@ -61,7 +59,8 @@ const allowedOrigins = [
   "http://localhost:3001",
   "http://localhost:5173",
   "http://127.0.0.1:7000",
-  "http://localhost:7000"
+  "http://localhost:7000",
+  "https://qrgenious.onrender.com"
 ];
 
 // CORS setup
@@ -77,14 +76,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// Security and Parsing Middleware
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-app.use(helmet({
-  contentSecurityPolicy: false,
-}));
-app.use(cookieParser());
-app.use(limiter);
+
 
 // Routes Logging for Debugging
 console.log('✅ qrRoutes is:', typeof qrRoutes, qrRoutes?.stack ? 'Router stack loaded' : 'MISSING or INVALID');
@@ -116,18 +108,38 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error: ' + err.message });
 });
 
-// MongoDB Connection
-connectDB();
+connectDB()
+  .then(() => {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      
+      // Development-only memory logging
+      if (process.env.NODE_ENV === 'development') {
+        setInterval(() => {
+          const mem = process.memoryUsage();
+          console.log("Memory Usage (MB):", {
+            rss: (mem.rss / 1024 / 1024).toFixed(2),
+            heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2),
+          });
+        }, 60000);
+      }
+    });
+  })
+  .catch(err => {
+    console.error('Database connection failed', err);
+    process.exit(1);
+  });
 
 mongoose.set('bufferCommands', false);
-
+mongoose.set('bufferTimeoutMS', 30000);
 
 mongoose.set('debug', true);
 
 
 app.use((req, res, next) => {
   const acceptHeader = req.headers.accept || "";
-  
+
   // Serve index.html only for browser requests (not API requests or assets)
   if (acceptHeader.includes("html")) {
     res.sendFile(path.join(__dirname, "qr_generator", "dist", "index.html"));
@@ -139,7 +151,5 @@ app.use((req, res, next) => {
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  // Connect to MongoDB
-  connectDB();
   console.log(`🌐 Server running on 🚀 http://localhost:${PORT}`);
 });

@@ -1,5 +1,6 @@
 import QRData from '../Models/QRData.js';
-import QRCode from 'qrcode';
+import { createCanvas } from 'canvas';
+import {toCanvas}  from 'qrcode'; 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,77 +10,192 @@ import { deleteFileFromImageKit, imagekit } from '../Utils/imagekit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Memory management
+const MAX_MEMORY_MB = 150;
+let qrCodeModule = null;
+
+async function getQRGenerator() {
+  if (!qrCodeModule) {
+    // Lazy load the QR code module
+    qrCodeModule = await import('qrcode');
+  }
+  return qrCodeModule;
+}
+
+async function generateQRCode(url, color = '#000000') {
+  // Check memory before generation
+  const usedMB = process.memoryUsage().heapUsed / 1024 / 1024;
+  if (usedMB > MAX_MEMORY_MB * 0.8 && global.gc) {
+    global.gc();
+    console.log('⚠️ Forced garbage collection before QR generation');
+  }
+
+  const canvas = createCanvas(150, 150);
+  const qr = await getQRGenerator();
+  
+  // Generate QR code directly to canvas
+  await qr.toCanvas(canvas, url, {
+    color: {
+      dark: color,
+      light: '#ffffff00' // Transparent background
+    },
+    width: 150,
+    margin: 2,
+    errorCorrectionLevel: 'M' // Medium error correction
+  });
+
+  // Convert to buffer without holding multiple copies in memory
+  return new Promise((resolve) => {
+    canvas.toBuffer((err, buffer) => {
+      if (err) throw err;
+      resolve(buffer);
+    });
+  });
+}
+
 export const createQR = async (req, res) => {
   try {
     const { title, content, color = '#000000' } = req.body;
 
-    // Generate slug first
+    // Input validation
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
+    }
+
+    // Generate slug
     const baseSlug = slugify(title, { lower: true, strict: true });
-    const randomSuffix = Math.random().toString(36).substring(2, 7);
-    const slug = `${baseSlug}-${randomSuffix}`;
+    const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`;
+    const qrUrl = `${process.env.FRONTEND_URL}/qr/${slug}`;
 
-    const publicUrl = `${process.env.FRONTEND_URL}/qr/${slug}`;
+    // Generate QR code with memory protection
+    let qrBuffer;
+    try {
+      qrBuffer = await generateQRCode(qrUrl, color);
+    } catch (err) {
+      console.error('QR generation failed:', err);
+      return res.status(500).json({ error: 'QR generation failed' });
+    }
 
-    // Generate QR image
-    const qrImage = await QRCode.toBuffer(publicUrl, {
-      color: {
-        dark: color,
-        light: '#ffffff00'
-      },
-      width: 150,
-      margin: 2
-    });
-
-    // Upload the QR code image to ImageKit
+    // Upload to ImageKit
     let uploadResponse;
     try {
       uploadResponse = await imagekit.upload({
-        file: qrImage, // Image buffer
-        fileName: `${slug}.png`, // File name for ImageKit
-        folder: '/QR_images/', // Optional: store in folder
-        useUniqueFileName: false,  // Important for consistent file IDs
-        overwriteFile: false
+        file: qrBuffer,
+        fileName: `${slug}.png`,
+        folder: '/QR_images/',
+        useUniqueFileName: false
       });
-      console.log("QR Images upload successfully on Imagekit")
-    } catch (error) {
-      console.error("Error uploading to ImageKit:", error);
-      const statusCode = error?.httpCode || 500;
-      const message = error?.message || 'Failed to upload QR image to ImageKit';
-      return res.status(statusCode).json({
-        error: message
-      });
+      console.log('QR uploaded to ImageKit');
+    } catch (uploadErr) {
+      console.error('Upload failed:', uploadErr);
+      return res.status(502).json({ error: 'Image upload service unavailable' });
     }
 
-    // Create initial QRData document WITHOUT downloadLink
+    // Create and save document
     const qrData = new QRData({
       userId: req.userId,
       title,
       content,
       slug,
-      generatedBy: 'Admin',
-      qrImage: uploadResponse.url, // Store ImageKit public URL
+      qrImage: uploadResponse.url,
       downloadLink: uploadResponse.url
     });
 
-    const savedData = await qrData.save();
-
-    await savedData.save();
+    await qrData.save();
 
     return res.status(201).json({
-      message: "QR Image Data created successfully!",
-      id: savedData._id,
-      slug,
+      message: "QR created successfully",
       qrImage: uploadResponse.url,
-      generatedBy: 'Admin',
-      downloadLink: uploadResponse.url,
-      title,
-      content
+      slug:qrData.slug,
+      content:qrData.content,
+      downloadLink:qrData.downloadLink,
+      qrId:qrData._id,
+      color:qrData.color,
+      createdAt:qrData.createdAt,
+      scanCount:qrData.scanCount,
+      lastScannedAt:qrData.lastScannedAt
     });
+
   } catch (error) {
-    console.error("creating qr ", error);
-    return res.status(500).json({ error: 'Failed to generate QR' });
+    console.error('Create QR error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to create QR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
+
+// export const createQR = async (req, res) => {
+//   try {
+//     const { title, content, color = '#000000' } = req.body;
+
+//     // Generate slug first
+//     const baseSlug = slugify(title, { lower: true, strict: true });
+//     const randomSuffix = Math.random().toString(36).substring(2, 7);
+//     const slug = `${baseSlug}-${randomSuffix}`;
+
+//     const publicUrl = `${process.env.FRONTEND_URL}/qr/${slug}`;
+
+//     // Generate QR image
+//     const qrImage = await QRCode.toBuffer(publicUrl, {
+//       color: {
+//         dark: color,
+//         light: '#ffffff00'
+//       },
+//       width: 150,
+//       margin: 2
+//     });
+
+//     // Upload the QR code image to ImageKit
+//     let uploadResponse;
+//     try {
+//       uploadResponse = await imagekit.upload({
+//         file: qrImage, // Image buffer
+//         fileName: `${slug}.png`, // File name for ImageKit
+//         folder: '/QR_images/', // Optional: store in folder
+//         useUniqueFileName: false,  // Important for consistent file IDs
+//         overwriteFile: false
+//       });
+//       console.log("QR Images upload successfully on Imagekit")
+//     } catch (error) {
+//       console.error("Error uploading to ImageKit:", error);
+//       const statusCode = error?.httpCode || 500;
+//       const message = error?.message || 'Failed to upload QR image to ImageKit';
+//       return res.status(statusCode).json({
+//         error: message
+//       });
+//     }
+
+//     // Create initial QRData document WITHOUT downloadLink
+//     const qrData = new QRData({
+//       userId: req.userId,
+//       title,
+//       content,
+//       slug,
+//       generatedBy: 'Admin',
+//       qrImage: uploadResponse.url, // Store ImageKit public URL
+//       downloadLink: uploadResponse.url
+//     });
+
+//     const savedData = await qrData.save();
+
+//     await savedData.save();
+
+//     return res.status(201).json({
+//       message: "QR Image Data created successfully!",
+//       id: savedData._id,
+//       slug,
+//       qrImage: uploadResponse.url,
+//       generatedBy: 'Admin',
+//       downloadLink: uploadResponse.url,
+//       title,
+//       content
+//     });
+//   } catch (error) {
+//     console.error("creating qr ", error);
+//     return res.status(500).json({ error: 'Failed to generate QR' });
+//   }
+// };
 
 export const getQRHistory = async (req, res) => {
   try {
@@ -94,33 +210,7 @@ export const getQRHistory = async (req, res) => {
   }
 };
 
-// export const deleteQR = async (req, res) => {
-//   try {
-//     const qrItem = await QRData.findOne({ _id: req.params.id, userId: req.userId });
 
-//     if (!qrItem) {
-//       return res.status(404).json({ message: 'QR not found' });
-//     }
-
-//     // Delete the QR image from ImageKit
-//     if (qrItem.qrImage) {
-//       try {
-//         const fileId = qrData.qrImage.split('/QR_images/')[1]?.split('?')[0];
-//         await deleteFileFromImageKit(fileId);
-//         console.log("QR image deleted from ImageKit");
-//       } catch (error) {
-//         console.error("Error deleting QR image from ImageKit:", error);
-//       }
-//     }
-
-//     await QRData.findByIdAndDelete(req.params.id);
-
-//     return res.status(201).json({ message: 'QR deleted successfully' });
-//   } catch (error) {
-//     console.log("error in deleteQR", error);
-//     return res.status(500).json({ message: 'Failed to delete QR' });
-//   }
-// };
 export const deleteQR = async (req, res) => {
   try {
     // Find the QR code with ownership verification

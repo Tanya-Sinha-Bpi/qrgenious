@@ -12,28 +12,28 @@ const api = axios.create({
 
 // Custom Registration
 export const customRegister = (email, password) => {
-  return api.post(`${API_URL}/register`, { email, password });
+  return api.post(`${API_URL}/custom-register`, { email, password });
 };
 
 // Verify OTP
 export const verifyOTP = (email, otp) => {
-  return api.post(`${API_URL}/verify-otp`, { email, otp });
+  return api.post(`${API_URL}/verify-email`, { email, otp });
 };
 
 // Custom Login
 export const customLogin = (email, password) => {
-  return api.post(`${API_URL}/login`, { email, password });
+  return api.post(`${API_URL}/custom-login`, { email, password });
 };
 
 // Google Login
 export const googleAuth = (credential) => {
-  return api.post(`${API_URL}/google-auth`, { credential });
+  return api.post(`${API_URL}/auth-via-gauth`, { credential });
 };
 
 
 // Forgot Password
 export const forgotPassword = (email) => {
-  return api.post(`${API_URL}/forgot-password`, { email });
+  return api.post(`${API_URL}/send-request-for-password-reset`, { email });
 };
 
 // Reset Password
@@ -47,9 +47,10 @@ export const resendOTP = (email) => {
 };
 
 export const verifyToken = async () => {
-  const res = await api.get(`${Staitc_uri.VITE_BACKEND_URL}/api/auth/me`, {
+  const res = await api.get(`${API_URL}/get-me`, {
     withCredentials: true // ⬅️ Must be true for cookies to work
   });
+  // console.log("verifytoken page frontend data",res.data);
   return res.data;
 };
 
@@ -62,22 +63,3 @@ export const loginWithPassword = (email, password) => {
 export function manualLogout() {
   return api.post(`${API_URL}/logout`, {});
 }
-
-// export const sendPasswordResetOTP = (email) => {
-//   return axios.post(`${API_URL}/forgot-password`, { email });
-// };
-
-
-// export const sendOTP = (email, password) => {
-//   return axios.post(`${API_URL}/register`, { email, password });
-// };
-
-// Verify token on the server
-// export const verifyToken = async (token) => {
-//   const response = await axios.get(`${API_URL}/verify-token`, {
-//     headers: {
-//       Authorization: `Bearer ${token}`
-//     }
-//   });
-//   return response.data.user;
-// };

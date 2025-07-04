@@ -14,7 +14,9 @@ const HistoryItem = ({ item, onDelete }) => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await deleteQR(item.qrId, user.token);
+      const response = await deleteQR(item.qrId);
+      console.log("item in historyitem page",item);
+      console.log("id in history item page",item.qrId)
       onDelete(item.qrId);
       toast.success(response.data?.message || "Successfully Deleted" )
     } catch (error) {

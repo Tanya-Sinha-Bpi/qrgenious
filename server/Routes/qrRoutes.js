@@ -1,27 +1,17 @@
-// backend/routes/qrRoutes.js
-import express from 'express';
-import {
-  createQR,
-  getQRHistory,
-  deleteQR,
-  getQRDetails,
-  downloadQR,
-  updateQR,
-  getQRBySlug
-} from '../Controller/QrController.js';
-import {authenticatedUser} from '../Controller/AuthController.js';
+import express from "express";
+import { protect } from "../Controller/AuthController.js";
+import { createQRCode, deleteQRData, downloadQR, getAllQRHistory, getPublicQRDetails, getQRDetails, updateQRData } from "../Controller/QRController.js";
 
 const router = express.Router();
 
-// Protected routes
-router.post('/create-qr', authenticatedUser, createQR);
-router.get('/get-qr-history', authenticatedUser, getQRHistory);
-router.delete('/delete-qr/:id', authenticatedUser, deleteQR);
-router.get('/get-single-qr-details/:idOrSlug',authenticatedUser,getQRDetails);
-router.get('/download-qr/:id', authenticatedUser, downloadQR);
-router.put('/update-qrDetails/:idOrSlug', authenticatedUser, updateQR);
+router.post('/create-qr', protect, createQRCode);
+router.get('/get-qr-history', protect, getAllQRHistory);
+router.delete('/delete-qr/:qrID', protect, deleteQRData);
+router.get('/get-single-qr-details/:slugOrId',protect,getQRDetails);
+router.get('/download-qr/:id', protect, downloadQR);
+router.put('/update-qrDetails/:qrId', protect, updateQRData);
 
 // Public route
-router.get('/details/:slug', getQRBySlug);
+router.get('/details/:slugOrId', getPublicQRDetails);
 
 export default router;

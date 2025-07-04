@@ -9,7 +9,7 @@ const QRForm = ({
   setQrData,
   isViewMode,
   isEditMode,
-  qrData
+  qrData,
 }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -47,46 +47,63 @@ const QRForm = ({
       if (isEditMode) {
         try {
           // 🔄 EDIT MODE
-        response = await updateQR(formData.qrId, {
-          title: formData.title,
-          content: formData.content,
-          color: formData.color,
-        });
-        toast.success(
-          response.data?.message || "QR Code updated successfully!"
-        );
+          response = await updateQR(formData.qrId, {
+            title: formData.title,
+            content: formData.content,
+            color: formData.color,
+          });
+          toast.success(
+            response.data?.message || "QR Code updated successfully!"
+          );
         } catch (error) {
-          console.log("Error found when updateing",error)
-          toast.error(error?.response?.data?.message || "Something when updating Error" + error.message)
+          console.log("Error found when updateing", error);
+          toast.error(
+            error?.response?.data?.message ||
+              "Something when updating Error" + error.message
+          );
         }
       } else {
         try {
           // 🆕 CREATE MODE
-        response = await createQR({
-          title: formData.title,
-          content: formData.content,
-          color: formData.color,
-        });
-        toast.success(
-          response.data?.message || "QR code updated successfully!"
-        );
+          response = await createQR({
+            title: formData.title,
+            content: formData.content,
+            color: formData.color,
+          });
+          toast.success(
+            response.data?.message || "QR code updated successfully!"
+          );
         } catch (error) {
-           console.log("Error found when creating",error)
-          toast.error(error?.response?.data?.message || "Something when creating Error" + error.message)
+          console.log("Error found when creating", error);
+          toast.error(
+            error?.response?.data?.message ||
+              "Something when creating Error" + error.message
+          );
         }
       }
 
       // Save or update QR
+      const qrDataFromBackend = response.data?.data || {};
       const qr = {
-        qrId: response.data?.id || formData.qrId,
-        qrImage: response.data.qrImage || "",
-        downloadLink: response.data.downloadLink || "",
-        slugName: response.data.slug || "",
-        generated: response.data.generatedBy || "admin",
-        title: response.data.title,
-        content: response.data.content,
-        createdAt: response.data.createdAt || new Date().toISOString(),
+        qrId: qrDataFromBackend.qrId || formData.qrId,
+        qrImage: qrDataFromBackend.qrImage || "",
+        downloadLink: qrDataFromBackend.downloadLink || "",
+        slugName: qrDataFromBackend.slug || "",
+        generated: qrDataFromBackend.generatedBy || "admin",
+        title: formData.title,
+        content: qrDataFromBackend.content || formData.content,
+        createdAt: qrDataFromBackend.createdAt || new Date().toISOString(),
       };
+      // const qr = {
+      //   qrId: response.data?.id ||response.data?.qrId || formData.qrId ,
+      //   qrImage: response.data.qrImage || "",
+      //   downloadLink: response.data.downloadLink || "",
+      //   slugName: response.data.slug || "",
+      //   generated: response.data.generatedBy || "admin",
+      //   title: response.data.title || formData.title,
+      //   content: response.data.content || formData.content,
+      //   createdAt: response.data.createdAt || new Date().toISOString(),
+      // };
 
       setQrData(qr);
       // setSuccess("Saved successfully!");
@@ -209,41 +226,51 @@ const QRForm = ({
         </div>
       </div> */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-  {/* === QR Color Picker === */}
-  <div>
-    <label
-      htmlFor="color"
-      className="block text-sm font-medium text-gray-700 mb-2"
-    >
-      QR Color
-    </label>
-    <div className="flex items-center space-x-4">
-      <input
-        type="color"
-        id="color"
-        name="color"
-        value={formData.color}
-        onChange={handleChange}
-        className="w-12 h-12 border border-gray-300 rounded-lg cursor-pointer"
-      />
-      <span className="text-gray-600">{formData.color}</span>
-    </div>
-  </div>
+        {/* === QR Color Picker === */}
+        <div>
+          <label
+            htmlFor="color"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            QR Color
+          </label>
+          <div className="flex items-center space-x-4">
+            <input
+              type="color"
+              id="color"
+              name="color"
+              value={formData.color}
+              onChange={handleChange}
+              className="w-12 h-12 border border-gray-300 rounded-lg cursor-pointer"
+            />
+            <span className="text-gray-600">{formData.color}</span>
+          </div>
+        </div>
 
-  {/* === Extra Info (only in Edit Mode) === */}
-  {isViewMode && qrData && (
-    <div className="text-sm text-gray-600 space-y-2">
-      <p><strong>Created By:</strong> {qrData.generatedBy || 'Admin'}</p>
-      <p><strong>Created At:</strong> {new Date(qrData.createdAt).toLocaleString()}</p>
-      {qrData.lastScanned && (
-        <p><strong>Last Scanned:</strong> {new Date(qrData.lastScanned).toLocaleString()}</p>
-      )}
-      {qrData.scanCount !== undefined && (
-        <p><strong>Scan Count:</strong> {qrData.scanCount}</p>
-      )}
-    </div>
-  )}
-</div>
+        {/* === Extra Info (only in Edit Mode) === */}
+        {isViewMode && qrData && (
+          <div className="text-sm text-gray-600 space-y-2">
+            <p>
+              <strong>Created By:</strong> {qrData.generatedBy || "Admin"}
+            </p>
+            <p>
+              <strong>Created At:</strong>{" "}
+              {new Date(qrData.createdAt).toLocaleString()}
+            </p>
+            {qrData.lastScanned && (
+              <p>
+                <strong>Last Scanned:</strong>{" "}
+                {new Date(qrData.lastScanned).toLocaleString()}
+              </p>
+            )}
+            {qrData.scanCount !== undefined && (
+              <p>
+                <strong>Scan Count:</strong> {qrData.scanCount}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       <button
         type="submit"

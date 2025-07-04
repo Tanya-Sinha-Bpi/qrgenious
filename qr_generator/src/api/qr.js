@@ -9,7 +9,8 @@ const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
   }
 });
 //Creating QR 
@@ -18,28 +19,35 @@ export const createQR = (data) => {
 };
 
 // Get all QR History
-export const getQRHistory = (params) => {
-  return api.get('/get-qr-history', {params});
+export const getQRHistory = () => {
+  return api.get('/get-qr-history');
 };
 
 // Delete QR by Id
-export const deleteQR = (id) => {
-  return api.delete(`/delete-qr/${id}`);
+export const deleteQR = (qrID) => {
+  return api.delete(`/delete-qr/${qrID}`, {
+  });
 };
 
 // Get QR Details ID or Slug name
-export const getQRDetails = (idOrSlug) => {
-  return api.get(`/get-single-qr-details/${idOrSlug}`);
+export const getQRDetails = (slugOrId) => {
+  return api.get(`/get-single-qr-details/${slugOrId}`);
 };
 
 // Download a QR
 export const downloadQR = (id) => {
-  return api.get(`/download-qr/${id}`,{responseType: 'blob'});
+  return api.get(`/download-qr/${id}`, { responseType: 'blob' });
 };
 
 // Update QR by id
-export const updateQR = (idOrSlug,data) => {
-  return api.put(`/update-qrDetails/${idOrSlug}`, data);
+export const updateQR = (qrId, data) => {
+  console.log("qr id in qrjs api call page",qrId);
+  return api.put(`/update-qrDetails/${qrId}`, data);
+};
+
+// Get QR Details ID or Slug name for public
+export const getDetailsForPublic = (slugOrId) => {
+  return api.get(`/details/${slugOrId}`);
 };
 
 

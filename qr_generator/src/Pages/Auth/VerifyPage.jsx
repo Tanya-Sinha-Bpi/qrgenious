@@ -26,7 +26,7 @@ function VerifyPage() {
     const otpCode = otp.join("");
 
     // Basic validation
-    if (otpCode.length !== 6) {
+    if (otpCode.length <= 5) {
       toast.error("Please enter a 6-digit code");
       return;
     }
@@ -36,6 +36,7 @@ function VerifyPage() {
 
     try {
       const { data } = await verifyOTP(email, otpCode);
+      console.log("varifypage data frontend",otpCode,email);
       toast.success(data.message || "Email Verify successfully");
 
       localStorage.setItem("userEmail", data.user.email);
@@ -73,10 +74,10 @@ function VerifyPage() {
     // Clear error when typing
     if (error) setError("");
 
-    // Auto submit when last digit is entered
-    if (index === 5 && value) {
-      handleSubmit();
-    }
+    // // Auto submit when last digit is entered
+    // if (index === 5 && value) {
+    //   handleSubmit();
+    // }
   };
 
   return (

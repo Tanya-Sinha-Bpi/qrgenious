@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { verifyToken } from "../api/auth";
 
@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const ranOnce = useRef(false);
 
   // Check authentication on initial load and route changes
   // useEffect(() => {
@@ -37,6 +38,8 @@ export function AuthProvider({ children }) {
   //   checkAuth();
   // }, [location.pathname, navigate]);
   useEffect(() => {
+    // if (ranOnce.current) return;
+    // ranOnce.current = true;
     const checkAuth = async () => {
       setLoading(true);
       try {

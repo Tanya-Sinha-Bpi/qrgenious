@@ -1,38 +1,16 @@
-import express from 'express';
-import {
-  verifyOTP,
-  forgotPassword,
-  resetPassword,
-  resendOTP,
-  customRegister,
-  customLogin,
-  googleAuth,
-  sendOTP,
-  getMe,
-  logoutAdmin
-} from '../Controller/AuthController.js';
-
+import express from "express";
+import { customLogin, customRegister, getME, logoutUser, protect, resendOTP, resetPassword, sendPassowrdResetRequest, signORsignupViaGoogle, verifyEmail } from "../Controller/AuthController.js";
 
 const router = express.Router();
 
-// Custom registration flow
-router.post('/register', customRegister);
-router.post('/verify-otp', verifyOTP);
-router.post('/send-otp',sendOTP);
-router.post('/resend-otp', resendOTP);
-
-// Login methods
-router.post('/login', customLogin);
-router.post('/google-auth', googleAuth);
-
-// Password reset flow
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
-
-// Find me
-router.get('/me', getMe);
-
-//Logout
-router.post('/logout',logoutAdmin);
+router.post("/custom-register", customRegister);
+router.post("/verify-email", verifyEmail);
+router.post("/resend-otp", resendOTP);
+router.post("/send-request-for-password-reset", sendPassowrdResetRequest);
+router.post("/reset-password", resetPassword);
+router.post('/custom-login', customLogin);
+router.post('/auth-via-gauth', signORsignupViaGoogle);
+router.post("/logout", protect, logoutUser);
+router.get('/get-me',getME);
 
 export default router;

@@ -39,17 +39,21 @@ function LoginPage() {
       }
 
       try {
-        const { data } = await customLogin(formData.email, formData.password);
-        const { token, user } = data;
+        const response = await customLogin(formData.email, formData.password);
+        const { token, user } = response.data.data;
 
         localStorage.setItem('token', token);
         localStorage.setItem('userEmail', user.email);
+        localStorage.setItem('ISVerified',user.isVerified);
+        localStorage.setItem('Created',user.createdAt);
+        localStorage.setItem('When Verified',user.verifiedAt);
+        localStorage.setItem('Register Method',user.isGAuthRegistered);
         if (user.name) {
           localStorage.setItem('userName', user.name);
         }
         // 3️⃣ Configure axios for future requests
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        toast.success(data.message || "Login successfully");
+        toast.success(response.data.message || "Login successfully");
 
         setTimeout(() => {
           navigate("/dashboard", { state: { userData: formData.email } });

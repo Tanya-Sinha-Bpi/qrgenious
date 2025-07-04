@@ -73,18 +73,19 @@ const restrictedUsernames = [
   "888",
 ];
 
-for(let i=1; i<=100000000;i++){
+for(let i=1; i<=1000; i++){
     restrictedUsernames.push(`user${i}`);
 }
 
-const containsRestrictedKeywords = (username) =>{
-    return restrictedUsernames.some((restricted)=>
-    username.includes(restricted));
+const containsRestrictedKeyword =(username)=>{
+    return restrictedUsernames.some((restricted)=>{
+        username.includes(restricted)
+    });
 };
 
-const isRestrictedEmails = (email)=>{
+export const isRestrictedUsername = (email)=>{
     const username = email.split("@")[0].toLowerCase();
-    return containsRestrictedKeywords(username)
-}
+    return containsRestrictedKeyword(username);
+};
 
-export default isRestrictedEmails;
+// export default isRestrictedUsername;

@@ -3,16 +3,21 @@ import QRForm from "../../Components/Dashboard/QRForm";
 import QRDisplay from "../../Components/Dashboard/QRDisplay";
 import Navbar from "../../Components/Layout/Navbar";
 import { useLocation, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
+import { getQRDetails } from "../../api/qr";
 
 function QRDetailPage() {
   const { qrId } = useParams();
+  console.log("qrid form params for edit page in qrdetail page", qrId);
   const [qrData, setQrData] = useState(null);
   const location = useLocation();
+  const [loading, setLoading] = useState(true);
   const qrFromState = location.state?.qr || null;
+
   const isEditMode = location.pathname.startsWith("/edit");
   const isViewMode = location.pathname.startsWith("/qr");
   const [formData, setFormData] = useState({
-    qrId:null,
+    qrId: null,
     title: "",
     content: "",
     color: "#000000",
@@ -20,10 +25,31 @@ function QRDetailPage() {
 
   // const [qrData, setQrData] = useState(null);
 
+  // useEffect(() => {
+  //   if (qrFromState) {
+  //     setFormData({
+  //       qrId: qrFromState.qrId || "",
+  //       title: qrFromState.title || "",
+  //       content: qrFromState.content || "",
+  //       color: qrFromState.color || "#000000",
+  //     });
+
+  //     setQrData({
+  //       qrId: qrFromState.qrId,
+  //       qrImage: qrFromState.qrImage || "",
+  //       downloadLink: qrFromState.downloadLink || "",
+  //       slugName: qrFromState.slugName || "",
+  //       generated: qrFromState.generated || "user",
+  //       title: qrFromState.title,
+  //       content: qrFromState.content,
+  //       createdAt: qrFromState.createdAt,
+  //     });
+  //   }
+  // }, [qrFromState]);
   useEffect(() => {
     if (qrFromState) {
       setFormData({
-        qrId: qrFromState.qrId || "",
+        qrId: qrFromState.qrId || qrId, // ✅ ensure it's never undefined
         title: qrFromState.title || "",
         content: qrFromState.content || "",
         color: qrFromState.color || "#000000",
@@ -39,9 +65,81 @@ function QRDetailPage() {
         content: qrFromState.content,
         createdAt: qrFromState.createdAt,
       });
-    }
-  }, [qrFromState]);
 
+      setLoading(false);
+    } else {
+      const loadQR = async () => {
+        try {
+          setLoading(true);
+          const res = await getQRDetails(qrId);
+          const data = res.data;
+
+          setFormData({
+            qrId: data._id || qrId,
+            title: data.title,
+            content: data.content,
+            color: "#000000",
+          });
+
+          setQrData({
+            qrId: data._id,
+            title: data.title,
+            content: data.content,
+            qrImage: data.qrImage || "",
+            downloadLink: data.downloadLink || "",
+            slugName: data.slug || "",
+            createdAt: data.createdAt,
+            generated: data.generatedBy || "user",
+          });
+        } catch (err) {
+          toast.error("Failed to fetch QR details.");
+          console.error("QR fetch error:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadQR();
+    }
+  }, [qrFromState, qrId]);
+
+  // useEffect(() => {
+  //   const loadQR = async () => {
+  //     try {
+  //       setLoading(true);
+  //       console.log("qrid in detail page", qrId);
+  //       const res = await getQRDetails(qrId);
+  //       console.log("getting data form server in page ", res.data);
+  //       const data = res.data;
+
+  //       setFormData({
+  //         qrId: data._id,
+  //         title: data.title,
+  //         content: data.content,
+  //         color: "#000000",
+  //       });
+
+  //       setQrData({
+  //         qrId: data._id,
+  //         title: data.title,
+  //         content: data.content,
+  //         qrImage: data.qrImage || "",
+  //         downloadLink: data.downloadLink || "",
+  //         slugName: data.slug || "",
+  //         createdAt: data.createdAt,
+  //         generated: data.generatedBy || "user",
+  //       });
+  //     } catch (err) {
+  //       toast.error("Failed to fetch QR details.");
+  //       console.error("QR fetch error:", err);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+
+  //   loadQR();
+  // }, [qrId]);
+  // console.log("qr form state details in detail page", qrData);
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />

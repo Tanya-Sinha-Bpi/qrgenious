@@ -81,8 +81,8 @@ function App() {
           >
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="history" element={<HistoryPage />} />
-            <Route path="qr/:id" element={<QRDetailPage />} />
-            <Route path="edit/:id" element={<QRDetailPage />} />
+            <Route path="qr/:qrId" element={<QRDetailPage />} />
+            <Route path="edit/:qrId" element={<QRDetailPage />} />
             <Route index element={<Navigate to="/dashboard" replace />} />
           </Route>
 
@@ -91,7 +91,7 @@ function App() {
 
           {/* Not Found */}
           <Route path="*" element={<NotFoundPage />} />
-          <Route path="/public/qr/:slug" element={<PublicQRViewPage />} />
+          <Route path="/public/qr/:slugOrId" element={<PublicQRViewPage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

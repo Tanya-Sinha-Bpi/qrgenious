@@ -1,560 +1,411 @@
-import QRData from '../Models/QRData.js';
-import { createCanvas } from 'canvas';
-import {toCanvas}  from 'qrcode'; 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import slugify from 'slugify';
-import mongoose from 'mongoose';
-import { deleteFileFromImageKit, imagekit } from '../Utils/imagekit.js';
+import { errors } from "../Utils/apiHelpers.js";
+import { deleteFile, extractFileIdFromUrl, uploadFileFromStream } from "../Services/imageKit.js";
+import { generateQRCodeBuffer, generateQRCodeStream } from "../Utils/qrHelper.js";
+import QRData from "../Models/QRModel.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Memory management
-const MAX_MEMORY_MB = 150;
-let qrCodeModule = null;
-
-async function getQRGenerator() {
-  if (!qrCodeModule) {
-    // Lazy load the QR code module
-    qrCodeModule = await import('qrcode');
-  }
-  return qrCodeModule;
-}
-
-async function generateQRCode(url, color = '#000000') {
-  // Check memory before generation
-  const usedMB = process.memoryUsage().heapUsed / 1024 / 1024;
-  if (usedMB > MAX_MEMORY_MB * 0.8 && global.gc) {
-    global.gc();
-    console.log('⚠️ Forced garbage collection before QR generation');
-  }
-
-  const canvas = createCanvas(150, 150);
-  const qr = await getQRGenerator();
-  
-  // Generate QR code directly to canvas
-  await qr.toCanvas(canvas, url, {
-    color: {
-      dark: color,
-      light: '#ffffff00' // Transparent background
-    },
-    width: 150,
-    margin: 2,
-    errorCorrectionLevel: 'M' // Medium error correction
-  });
-
-  // Convert to buffer without holding multiple copies in memory
-  return new Promise((resolve) => {
-    canvas.toBuffer((err, buffer) => {
-      if (err) throw err;
-      resolve(buffer);
-    });
-  });
-}
-
-export const createQR = async (req, res) => {
-  try {
-    const { title, content, color = '#000000' } = req.body;
-
-    // Input validation
-    if (!title || !content) {
-      return res.status(400).json({ error: 'Title and content are required' });
-    }
-
-    // Generate slug
-    const baseSlug = slugify(title, { lower: true, strict: true });
-    const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`;
-    const qrUrl = `${process.env.FRONTEND_URL}/qr/${slug}`;
-
-    // Generate QR code with memory protection
-    let qrBuffer;
+export const createQRCode = async function (req, res, next) {
     try {
-      qrBuffer = await generateQRCode(qrUrl, color);
-    } catch (err) {
-      console.error('QR generation failed:', err);
-      return res.status(500).json({ error: 'QR generation failed' });
-    }
+        const { title, content, color } = req.body;
+        const { userId } = req;
+        console.log("DEBUG: USERID", req.userId)
 
-    // Upload to ImageKit
-    let uploadResponse;
-    try {
-      uploadResponse = await imagekit.upload({
-        file: qrBuffer,
-        fileName: `${slug}.png`,
-        folder: '/QR_images/',
-        useUniqueFileName: false
-      });
-      console.log('QR uploaded to ImageKit');
-    } catch (uploadErr) {
-      console.error('Upload failed:', uploadErr);
-      return res.status(502).json({ error: 'Image upload service unavailable' });
-    }
-
-    // Create and save document
-    const qrData = new QRData({
-      userId: req.userId,
-      title,
-      content,
-      slug,
-      qrImage: uploadResponse.url,
-      downloadLink: uploadResponse.url
-    });
-
-    await qrData.save();
-
-    return res.status(201).json({
-      message: "QR created successfully",
-      qrImage: uploadResponse.url,
-      slug:qrData.slug,
-      content:qrData.content,
-      downloadLink:qrData.downloadLink,
-      qrId:qrData._id,
-      color:qrData.color,
-      createdAt:qrData.createdAt,
-      scanCount:qrData.scanCount,
-      lastScannedAt:qrData.lastScannedAt
-    });
-
-  } catch (error) {
-    console.error('Create QR error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to create QR',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// export const createQR = async (req, res) => {
-//   try {
-//     const { title, content, color = '#000000' } = req.body;
-
-//     // Generate slug first
-//     const baseSlug = slugify(title, { lower: true, strict: true });
-//     const randomSuffix = Math.random().toString(36).substring(2, 7);
-//     const slug = `${baseSlug}-${randomSuffix}`;
-
-//     const publicUrl = `${process.env.FRONTEND_URL}/qr/${slug}`;
-
-//     // Generate QR image
-//     const qrImage = await QRCode.toBuffer(publicUrl, {
-//       color: {
-//         dark: color,
-//         light: '#ffffff00'
-//       },
-//       width: 150,
-//       margin: 2
-//     });
-
-//     // Upload the QR code image to ImageKit
-//     let uploadResponse;
-//     try {
-//       uploadResponse = await imagekit.upload({
-//         file: qrImage, // Image buffer
-//         fileName: `${slug}.png`, // File name for ImageKit
-//         folder: '/QR_images/', // Optional: store in folder
-//         useUniqueFileName: false,  // Important for consistent file IDs
-//         overwriteFile: false
-//       });
-//       console.log("QR Images upload successfully on Imagekit")
-//     } catch (error) {
-//       console.error("Error uploading to ImageKit:", error);
-//       const statusCode = error?.httpCode || 500;
-//       const message = error?.message || 'Failed to upload QR image to ImageKit';
-//       return res.status(statusCode).json({
-//         error: message
-//       });
-//     }
-
-//     // Create initial QRData document WITHOUT downloadLink
-//     const qrData = new QRData({
-//       userId: req.userId,
-//       title,
-//       content,
-//       slug,
-//       generatedBy: 'Admin',
-//       qrImage: uploadResponse.url, // Store ImageKit public URL
-//       downloadLink: uploadResponse.url
-//     });
-
-//     const savedData = await qrData.save();
-
-//     await savedData.save();
-
-//     return res.status(201).json({
-//       message: "QR Image Data created successfully!",
-//       id: savedData._id,
-//       slug,
-//       qrImage: uploadResponse.url,
-//       generatedBy: 'Admin',
-//       downloadLink: uploadResponse.url,
-//       title,
-//       content
-//     });
-//   } catch (error) {
-//     console.error("creating qr ", error);
-//     return res.status(500).json({ error: 'Failed to generate QR' });
-//   }
-// };
-
-export const getQRHistory = async (req, res) => {
-  try {
-    const qrData = await QRData.find({ userId: req.userId })
-      .sort({ createdAt: -1 })
-      .select('_id title createdAt updatedAt slug scanCount lastScannedAt content');
-
-    return res.status(200).json(qrData);
-  } catch (error) {
-    console.log("error in getQRHistory", error);
-    return res.status(500).json({ error: 'Failed to fetch history' });
-  }
-};
+        if (!userId) {
+            return errors.badRequest(res, "Unautorize")
+        }
+        // INPUT VALIDATION
+        if (!title || !content || !color) {
+            return errors.badRequest(res, 'All Fields are required');
+        }
 
 
-export const deleteQR = async (req, res) => {
-  try {
-    // Find the QR code with ownership verification
-    const qrItem = await QRData.findOne({ 
-      _id: req.params.id, 
-      userId: req.userId 
-    }).select('qrImage');
+        // First save minimal data to database
+        const [newQR] = await QRData.create([{
+            userId,
+            title,
+            content,
+            color,
+            scanCount: 0,
+            generatedBy: 'admin'
+        }]);
 
-    if (!qrItem) {
-      return res.status(404).json({ 
-        error: 'QR not found or not owned by user',
-        code: 'QR_NOT_FOUND'
-      });
-    }
+        const scanUrl = `${process.env.FRONTEND_BASE_URL}/public/qr/${newQR._id}`;
 
-    // Delete the associated image from ImageKit
-    if (qrItem.qrImage) {
-      try {
-        await deleteFileFromImageKit(qrItem.qrImage);
-        console.log('✅ QR image deleted from ImageKit');
-      } catch (error) {
-        console.error('❌ ImageKit deletion failed:', {
-          error: error.message,
-          qrImage: qrItem.qrImage,
-          timestamp: new Date().toISOString()
+        // Generate QR code as stream
+        const qrBuffer = await generateQRCodeStream(scanUrl, color);
+        qrBuffer.on('error', (err) => {
+            throw new Error(`QR generation failed: ${err.message}`);
         });
-        // Continue with deletion even if image deletion fails
-      }
+
+        if (!newQR) {
+            return errors.serverError(res, 'Failed to create QR record');
+        }
+
+        const fileName = `qr_${newQR._id}_${Date.now()}.png`;
+        const uploadResponse = await uploadFileFromStream(qrBuffer, fileName, {
+            tags: ['qr_code', `user_${userId}`]
+        });
+
+        // Verify upload succeeded
+        if (!uploadResponse.fileId) {
+            throw new Error('ImageKit upload failed - no fileId returned');
+        }
+
+
+
+        // Update with image URLs
+        const updatedQR = await QRData.findByIdAndUpdate(
+            newQR._id,
+            {
+                qrImage: uploadResponse.url,
+                downloadLink: uploadResponse.url,
+                updatedAt: new Date(),
+                imageKitFileId: uploadResponse.fileId,
+            },
+            { new: true }
+        ).lean();
+
+        return res.status(201).json({
+            success: true,
+            data: {
+                qrImage: uploadResponse.url,
+                slug: updatedQR.slug,
+                content: updatedQR.content,
+                downloadLink: uploadResponse.url,
+                qrId: updatedQR._id,
+                color: updatedQR.color,
+                createdAt: updatedQR.createdAt,
+                scanCount: updatedQR.scanCount,
+                lastScannedAt: updatedQR.lastScannedAt,
+            },
+            message: "QR code created successfully"
+        });
+
+    } catch (error) {
+
+        if (error.name === 'ValidationError') {
+            return errors.unprocessable(res, 'Validation failed', error.errors);
+        }
+
+        console.error('[CREATE_QR_ERROR]', error.message);
+        return errors.serverError(res,
+            process.env.NODE_ENV === 'development' ? error.message : null
+        );
     }
-
-    // Delete from database
-    await QRData.findByIdAndDelete(req.params.id);
-
-    return res.status(200).json({ 
-      message: 'QR deleted successfully',
-      deletedId: req.params.id
-    });
-
-  } catch (error) {
-    console.error('DELETE QR ERROR:', {
-      error: error.message,
-      stack: error.stack,
-      params: req.params,
-      timestamp: new Date().toISOString()
-    });
-    
-    return res.status(500).json({ 
-      error: 'Failed to delete QR',
-      details: error.message,
-      code: 'DELETE_FAILED'
-    });
-  }
 };
 
-export const getQRDetails = async (req, res) => {
-  try {
-    const { idOrSlug } = req.params;
+export const updateQRData = async function (req, res, next) {
+    try {
+        const { qrId } = req.params;
+        const { title, content, color } = req.body;
+        const { userId } = req;
 
-    // Determine if it's a valid MongoDB ObjectId
-    const isObjectId = mongoose.Types.ObjectId.isValid(idOrSlug);
+        // Validate input
+        if (!qrId) {
+            return errors.notFound(res, "QR ID not found in request");
+        }
 
-    const query = isObjectId
-      ? { _id: idOrSlug }
-      : { slug: idOrSlug };
+        // Find existing QR code
+        const existingQR = await QRData.findOne({ _id: qrId, userId });
 
+        if (!existingQR) {
+            return errors.notFound(res, "QR code not found or you don't have permission");
+        }
 
-    const qrData = await QRData.findOne(query)
-      .select('title content createdAt lastScannedAt scanCount slug downloadLink');
+        // Prepare update data
+        const updateData = {
+            updatedAt: new Date()
+        };
 
-    if (!qrData) {
-      return res.status(404).json({ error: 'QR not found' });
+        if (title) updateData.title = title;
+        if (content) updateData.content = content;
+        if (color) updateData.color = color;
+
+        // Check if we need to regenerate QR image (if content or color changed)
+        let uploadResponse = null;
+        if (content || color) {
+            // Generate new QR code
+            const qrContent = content || existingQR.content;
+            const qrColor = color || existingQR.color;
+            const scanUrl = `${process.env.FRONTEND_BASE_URL}/public/qr/${qrId}`;
+
+            const qrBuffer = await generateQRCodeStream(scanUrl, qrColor);
+            qrBuffer.on('error', (err) => {
+                throw new Error(`QR generation failed: ${err.message}`);
+            });
+
+            const fileName = `qr_${qrId}_${Date.now()}.png`;
+
+            let oldFileDeleted = false;
+            if (existingQR.imageKitFileId) {
+                try {
+                    await deleteFile(existingQR.imageKitFileId);
+                    oldFileDeleted = true;
+                } catch (deleteError) {
+                    console.error("Old image deletion failed (proceeding):", {
+                        error: deleteError.message,
+                        fileId: existingQR.imageKitFileId,
+                        qrId: qrId
+                    });
+                }
+            }
+
+            // Upload new QR image
+            try {
+                uploadResponse = await uploadFileFromStream(
+                    qrBuffer,
+                    fileName,
+                    { tags: ['qr_code', `user_${userId}`] }
+                );
+                if (!uploadResponse.fileId) {
+                    throw new Error('ImageKit upload failed - no fileId returned');
+                }
+                updateData.qrImage = uploadResponse.url;
+                updateData.downloadLink = uploadResponse.url;
+                updateData.imageKitFileId = uploadResponse.fileId;
+
+                console.log('QR image updated:', {
+                    oldFileDeleted,
+                    newFileId: uploadResponse.fileId,
+                    qrId: qrId
+                });
+            } catch (uploadError) {
+                console.error("ImageKit upload failed:", uploadError);
+                return errors.serverError(res, 'Failed to update QR image');
+            }
+
+        }
+
+        // Update the QR code record
+        const updatedQR = await QRData.findByIdAndUpdate(
+            qrId,
+            updateData,
+            { new: true }
+        ).lean();
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                message: "QR updated successfully",
+                qrId: updatedQR._id,
+                title: updatedQR.title,
+                content: updatedQR.content,
+                color: updatedQR.color,
+                qrImage: updatedQR.qrImage,
+                downloadLink: updatedQR.downloadLink,
+                updatedAt: updatedQR.updatedAt
+            }
+        });
+
+    } catch (error) {
+
+        if (error.name === 'CastError') {
+            return errors.badRequest(res, "Invalid QR code ID format");
+        }
+        if (error.name === 'ValidationError') {
+            return errors.unprocessable(res, 'Validation failed', error.errors);
+        }
+
+        console.error('[UPDATE_QR_ERROR]', error);
+        return errors.serverError(res,
+            process.env.NODE_ENV === 'development' ? error.message : null
+        );
     }
-
-    return res.json(qrData);
-  } catch (error) {
-    console.log("error in getQRdetails", error);
-    return res.status(500).json({ error: 'Failed to retrieve QR details Server error' + error.message });
-  }
 };
 
 export const downloadQR = async (req, res) => {
-  try {
-    const qrData = await QRData.findById(req.params.id);
-    if (!qrData) return res.status(404).json({ error: 'QR not found' });
+    try {
+        const qrData = await QRData.findById(req.params.id);
+        if (!qrData) return res.status(404).json({ error: 'QR not found' });
 
-    const downloadLink = qrData.downloadLink; // Get the download link from the database
+        const downloadLink = qrData.downloadLink; // Get the download link from the database
 
-    if (!downloadLink) {
-      return res.status(404).json({ error: 'Download link not available' });
-    }
-
-    // Redirect the client to the image URL from ImageKit for download
-    res.redirect(downloadLink); // This will trigger the file download from ImageKit
-  } catch (error) {
-    console.log("Error in downloading QR", error);
-    return res.status(500).json({ error: 'Failed to retrieve QR image for download' });
-  }
-};
-export const updateQR = async (req, res) => {
-  try {
-    const { idOrSlug } = req.params;
-    const updates = req.body;
-
-    // Find existing QR
-    const qr = await QRData.findOne(
-      mongoose.Types.ObjectId.isValid(idOrSlug) 
-        ? { _id: idOrSlug } 
-        : { slug: idOrSlug }
-    ).select('qrImage slug _id').lean();
-
-    if (!qr) return res.status(404).json({ error: 'QR not found' });
-
-    // Track old image for cleanup
-    let oldImageUrl = qr.qrImage;
-    let deletionSuccess = true;
-
-    // Attempt deletion (but proceed if API fails)
-    if (oldImageUrl) {
-      try {
-        await deleteFileFromImageKit(oldImageUrl);
-      } catch (error) {
-        deletionSuccess = false;
-        console.warn('Deletion failed (proceeding with update):', error.message);
-      }
-    }
-
-    // Generate new QR
-    const qrImage = await QRCode.toBuffer(
-      `${process.env.FRONTEND_URL}/qr/${qr.slug}`,
-      {
-        color: { 
-          dark: updates.color || '#000000',
-          light: '#ffffff00'
-        },
-        width: 150,
-        margin: 2
-      }
-    );
-
-    // Upload with unique name if deletion failed
-    const uploadResponse = await imagekit.upload({
-      file: qrImage,
-      fileName: deletionSuccess ? `${qr.slug}.png` : `${qr.slug}-${Date.now()}.png`,
-      folder: '/QR_images/',
-      useUniqueFileName: !deletionSuccess,
-      overwriteFile: deletionSuccess
-    });
-
-    // Update database
-    const updatedQR = await QRData.findOneAndUpdate(
-      { _id: qr._id },
-      {
-        qrImage: uploadResponse.url,
-        downloadLink: uploadResponse.url,
-        updatedAt: new Date(),
-        ...(updates.title && { title: updates.title }),
-        ...(updates.content && { content: updates.content }),
-        ...(updates.color && { color: updates.color }),
-        ...(updates.bumpScan && { 
-          $inc: { scanCount: 1 },
-          lastScannedAt: new Date() 
-        })
-      },
-      { new: true }
-    );
-
-    return res.json({
-      ...updatedQR.toObject(),
-      warnings: !deletionSuccess ? ['Old image could not be deleted'] : undefined
-    });
-
-  } catch (error) {
-    console.error('UPDATE ERROR:', error);
-    return res.status(500).json({
-      error: 'Update failed',
-      details: error.message
-    });
-  }
-};
-// export const updateQR = async (req, res) => {
-//   try {
-//     const { idOrSlug } = req.params;
-//     const updates = req.body;
-
-//     // Input validation
-//     if (!idOrSlug) {
-//       return res.status(400).json({
-//         error: 'Invalid request',
-//         details: 'Missing QR code identifier',
-//         code: 'MISSING_ID'
-//       });
-//     }
-
-//     // Find existing QR
-//     const qr = await QRData.findOne(
-//       mongoose.Types.ObjectId.isValid(idOrSlug)
-//         ? { _id: idOrSlug }
-//         : { slug: idOrSlug }
-//     ).select('qrImage slug _id').lean();
-
-//     if (!qr) {
-//       return res.status(404).json({
-//         error: 'Not found',
-//         details: 'QR code not found',
-//         code: 'QR_NOT_FOUND'
-//       });
-//     }
-
-//     // Mandatory deletion of old image
-//     if (qr.qrImage) {
-//       try {
-//         await deleteFileFromImageKit(qr.qrImage);
-//       } catch (error) {
-//         return res.status(502).json({
-//           error: 'ImageKit service unavailable',
-//           details: 'Could not delete old image. Please try again later.',
-//           debug: {
-//             fileUrl: qr.qrImage,
-//             extractedId: getFileIdFromUrl(qr.qrImage),
-//             error: error.message,
-//             timestamp: new Date().toISOString()
-//           }
-//         });
-//       }
-//     }
-//     //   if (qr.qrImage) {
-//     //   try {
-//     //     await deleteFileFromImageKit(qr.qrImage);
-//     //   } catch (error) {
-//     //     return res.status(500).json({
-//     //       error: 'Cannot update QR',
-//     //       details: 'Failed to delete existing image: ' + error.message,
-//     //       code: 'DELETE_FAILED',
-//     //       severity: 'critical',
-//     //       debug: {
-//     //         fileUrl: qr.qrImage,
-//     //         extractedId: extractFileId(qr.qrImage),
-//     //         timestamp: new Date().toISOString()
-//     //       }
-//     //     });
-//     //   }
-//     // }
-
-//     // Generate new QR
-//     const qrImage = await QRCode.toBuffer(
-//       `${process.env.FRONTEND_URL}/qr/${qr.slug}`,
-//       {
-//         color: {
-//           dark: updates.color || '#000000',
-//           light: '#ffffff00'
-//         },
-//         width: 150,
-//         margin: 2
-//       }
-//     );
-
-//     // Upload new image
-//     let uploadResponse;
-//     try {
-//       uploadResponse = await imagekit.upload({
-//         file: qrImage,
-//         fileName: `${qr.slug}.png`,
-//         folder: '/QR_images/',
-//         useUniqueFileName: false,
-//         overwriteFile: true,
-//         tags: ['qr_code', 'updated']
-//       });
-//     } catch (uploadError) {
-//       return res.status(500).json({
-//         error: 'Upload failed',
-//         details: uploadError.message,
-//         code: 'UPLOAD_FAILED'
-//       });
-//     }
-
-//     // Prepare update
-//     const updateData = {
-//       qrImage: uploadResponse.url,
-//       downloadLink: uploadResponse.url,
-//       updatedAt: new Date()
-//     };
-
-//     // Optional updates
-//     if (updates.title) updateData.title = updates.title;
-//     if (updates.content) updateData.content = updates.content;
-//     if (updates.color) updateData.color = updates.color;
-//     if (updates.bumpScan) {
-//       updateData.$inc = { scanCount: 1 };
-//       updateData.lastScannedAt = new Date();
-//     }
-
-//     // Update database
-//     const updatedQR = await QRData.findOneAndUpdate(
-//       { _id: qr._id },
-//       updateData,
-//       { new: true, lean: true }
-//     );
-
-//     return res.json(updatedQR);
-
-//   } catch (error) {
-//     console.error('CRITICAL UPDATE ERROR:', {
-//       error: error.message,
-//       stack: error.stack,
-//       timestamp: new Date().toISOString()
-//     });
-
-//     return res.status(500).json({
-//       error: 'System error',
-//       details: 'Please contact support',
-//       code: 'SYSTEM_FAILURE'
-//     });
-//   }
-// };
-
-export const getQRBySlug = async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const bumpScan = req.query.bumpScan === 'true';
-
-    const qr = await QRData.findOneAndUpdate(
-      { slug },
-      bumpScan
-        ? {
-          $set: { lastScannedAt: new Date() },
-          $inc: { scanCount: 1 },
+        if (!downloadLink) {
+            return res.status(404).json({ error: 'Download link not available' });
         }
-        : {},
-      { new: true }
-    );
 
-    if (!qr) {
-      return res.status(404).json({ error: 'QR not found' });
+        // Redirect the client to the image URL from ImageKit for download
+        res.redirect(downloadLink); // This will trigger the file download from ImageKit
+    } catch (error) {
+        console.log("Error in downloading QR", error);
+        return res.status(500).json({ error: 'Failed to retrieve QR image for download' });
     }
-
-    return res.status(200).json({
-      title: qr.title,
-      content: qr.content,
-      createdAt: qr.createdAt,
-      lastScanned: qr.lastScannedAt,
-    });
-  } catch (err) {
-    console.log("error in getQRbySlug", error);
-    return res.status(500).json({ error: 'Server error: ' + err.message });
-  }
 };
+
+export const handleQRScan = async function (req, res, next) {
+    try {
+        const { qrId } = req.params;
+
+        // Increment scan count and update last scanned
+        const qrCode = await QRData.findOneAndUpdate(
+            { _id: qrId },
+            {
+                $inc: { scanCount: 1 },
+                $set: { lastScannedAt: new Date() }
+            },
+            { new: true }
+        ).lean();
+
+        if (!qrCode) {
+            return errors.notFound(res, 'QR code not found');
+        }
+
+        // Redirect user to frontend page showing QR details (public page)
+        return res.redirect(`/public/qr/${qrCode.slug || qrCode._id}`);
+
+    } catch (error) {
+        console.error('[QR_SCAN_ERROR]', error);
+        return errors.serverError(res, 'Failed to process QR scan');
+    }
+};
+
+
+export const getQRDetails = async function (req, res, next) {
+    try {
+        const { slugOrId } = req.params;
+
+        const qrCode = await QRData.findOne({
+            $or: [
+                { _id: slugOrId },
+                { slug: slugOrId }
+            ]
+        }).lean();
+
+        if (!qrCode) {
+            return errors.notFound(res, 'QR code not found');
+        }
+
+        // Render HTML page for web visitors
+        return res.status(200).json({
+            success: true,
+            data: {
+                qrId: qrCode._id,
+                title: qrCode.title,
+                content: qrCode.content,
+                scanCount: qrCode.scanCount,
+                createdAt: qrCode.craetedAt,
+                qrImage: qrCode.qrImage,
+                downloadLink: qrCode.downloadLink,
+                qrImage: qrCode.qrImage
+            }
+
+        });
+
+    } catch (error) {
+        console.error('[QR_DETAILS_ERROR]', error);
+        return errors.serverError(res, 'Failed to get QR details');
+    }
+};
+
+export const deleteQRData = async function (req, res, next) {
+    try {
+        const { qrID } = req.params;
+        const { userId } = req;
+        if (!userId) {
+            return errors.badRequest(res, "Unauthorise")
+        }
+        // Validate input
+        if (!qrID) {
+            return errors.notFound(res, "QR ID not found in request");
+        }
+
+        // Find the QR code data
+        const qrData = await QRData.findOne({ _id: qrID, userId });
+
+        if (!qrData) {
+            return errors.notFound(res, "QR code not found or access denied");
+        }
+
+        await QRData.deleteOne({ _id: qrID });
+
+        let deletionResult = { success: false };
+        if (qrData.imageKitFileId) {
+            try {
+                await deleteFile(qrData.imageKitFileId);
+                deletionResult = { success: true };
+            } catch (error) {
+                console.error('ImageKit deletion error:', {
+                    error: error.message,
+                    qrId: qrID,
+                    fileId: qrData.imageKitFileId,
+                    url: qrData.qrImage
+                });
+                deletionResult = {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: deletionResult.success
+                ? "QR code completely deleted"
+                : "QR data deleted (image may still exist)",
+            data: {
+                qrId: qrID,
+                deletedAt: new Date()
+            }
+        });
+
+    } catch (error) {
+        if (error.name === 'CastError') {
+            return errors.badRequest(res, "Invalid QR code ID format");
+        }
+
+        console.error('[DELETE_QR_ERROR]', error);
+        return errors.serverError(res,
+            process.env.NODE_ENV === 'development' ? error.message : null
+        );
+    }
+}
+
+export const getAllQRHistory = async (req, res) => {
+    try {
+        if (!req.userId) {
+            return res.badRequest(res, "Unauthorise");
+        }
+        const qrData = await QRData.find({ userId: req.userId })
+            .sort({ craetedAt: -1 })
+            .select('_id title craetedAt updatedAt slug scanCount lastScannedAt content qrImage downloadLink');
+        // console.log("qt history in controller", qrData);
+        return res.status(200).json(qrData);
+    } catch (error) {
+        console.log("error in getQRHistory", error);
+        return res.status(500).json({ error: 'Failed to fetch history' });
+    }
+};
+
+export const getPublicQRDetails = async (req, res) => {
+    try {
+        const { slugOrId } = req.params;
+
+        const query = slugOrId.length === 24
+            ? { _id: slugOrId }
+            : { slug: slugOrId };
+
+        const qr = await QRData.findOne(query).select('title content craetedAt scanCount lastScannedAt');
+
+        if (!qr) {
+            return res.status(404).json({ message: 'QR not found' });
+        }
+
+        // Optional bump scan count
+        if (req.query.bumpScan === 'true') {
+            await QRData.findOneAndUpdate(query, {
+                $inc: { scanCount: 1 },
+                lastScannedAt: new Date(),
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: qr,
+        });
+    } catch (err) {
+        console.error('Error in public QR fetch:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { getQRHistory } from "../../api/qr";
+import { deleteQR, getQRHistory } from "../../api/qr";
 import { useAuth } from "../../Context/AuthContext";
 import Navbar from "../../Components/Layout/Navbar";
 import HistoryItem from "../../Components/Dashboard/HistoryItem"; // Named import
+import { toast } from "react-toastify";
 
 function HistoryPage() {
   const [history, setHistory] = useState([]);
@@ -19,6 +20,7 @@ function HistoryPage() {
       try {
         setLoading(true);
         const res = await getQRHistory();
+        // console.log("history data in history page", res.data);
         const serverData = res.data;
 
         const localData = JSON.parse(localStorage.getItem("qr_history")) || [];
@@ -27,7 +29,7 @@ function HistoryPage() {
         const existingIds = new Set(
           localData.map((item) => item.qrId || item._id)
         );
-        console.log("history in history page from localstorage", qrHistory);
+        // console.log("history in history page from localstorage", qrHistory);
         const merged = [
           ...localData,
           ...serverData
@@ -36,18 +38,16 @@ function HistoryPage() {
               qrId: item._id,
               title: item.title,
               content: item.content || "",
-              qrImage: "", // Optional: get from base64 if needed
+              qrImage: item.qrImage || "", // keep actual image URL from server
               slugName: item.slug || "",
-              downloadLink: `/api/qr/download-qr/${item._id}`,
-              generated: item.generatedBy || "user",
-              createdAt: item.createdAt,
+              downloadLink:
+                item.downloadLink || `/api/qr/download-qr/${item._id}`, // keep server URL if exists
+              generated: item.generatedBy || "Admin",
+              createdAt: item.craetedAt || item.createdAt, // fix typo
             })),
         ];
 
-        localStorage.setItem(
-          "qr_history",
-          JSON.stringify(merged.slice(0, 20))
-        );
+        localStorage.setItem("qr_history", JSON.stringify(merged.slice(0, 20)));
         setQrHistory(merged.slice(0, 20));
         setHistory(res.data);
       } catch (err) {
@@ -55,7 +55,7 @@ function HistoryPage() {
           "Failed to load QR history. Please try again." + err.message
         );
         setError("Failed to load QR history. Please try again.");
-        console.error("Error fetching history:", err);
+        // console.error("Error fetching history:", err);
       } finally {
         setLoading(false);
       }
@@ -64,16 +64,19 @@ function HistoryPage() {
     fetchHistory();
   }, [user.token]);
 
-const handleDelete = (id) => {
-  // Remove from UI state
-  setHistory(prev => prev.filter(item => item.qrId !== id));
-  setQrHistory(prev => prev.filter(item => item.qrId !== id));
+  const handleDelete = async (id) => {
+    // Remove from UI state
 
-  // Remove from localStorage
-  const existing = JSON.parse(localStorage.getItem("qr_history")) || [];
-  const updated = existing.filter(item => item.qrId !== id);
-  localStorage.setItem("qr_history", JSON.stringify(updated));
-};
+    // await deleteQR(id);
+    // console.log("id in delete fucntion in history page",id)
+    setHistory((prev) => prev.filter((item) => item.qrId !== id));
+    setQrHistory((prev) => prev.filter((item) => item.qrId !== id));
+
+    // Remove from localStorage
+    const existing = JSON.parse(localStorage.getItem("qr_history")) || [];
+    const updated = existing.filter((item) => item.qrId !== id);
+    localStorage.setItem("qr_history", JSON.stringify(updated));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -159,7 +162,11 @@ const handleDelete = (id) => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {qrHistory.map((item) => (
-              <HistoryItem key={item.qrId} item={item} onDelete={handleDelete} />
+              <HistoryItem
+                key={item.qrId}
+                item={item}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
         )}
